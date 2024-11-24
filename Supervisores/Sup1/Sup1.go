@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
-	"os"
 	"time"
 
-	brokerpb "C:\Users\sebas\Desktop\lab3-sd\proto\generated\Broker" // Ajusta esta ruta según tu configuración
-	hextechpb "C:\Users\sebas\Desktop\lab3-sd\proto\generated\HextechServer"
+	brokerpb "LAB3-SD/proto/generated/Broker"
+	hextechpb "LAB3-SD/proto/generated/HextechServer"
+
 	"google.golang.org/grpc"
 )
 
@@ -19,7 +18,7 @@ const (
 
 type Supervisor struct {
 	id                   int
-	lastKnownVectorClock map[string][]int
+	lastKnownVectorClock map[string][]int32
 }
 
 // connectToBroker establece conexión con el Broker
@@ -40,12 +39,14 @@ func (s *Supervisor) sendCommand(brokerAddress string, command string, args []st
 	}
 	defer conn.Close()
 
-	request := &brokerpb.CommandRequest{
+	// Create a request for the broker
+	brokerRequest := &brokerpb.CommandRequest{
 		Command: command,
 		Args:    args,
 	}
-	// Enviar al Broker
-	response, err := brokerClient.RouteCommand(context.Background(), request)
+
+	// Send the command to the broker
+	response, err := brokerClient.RouteCommand(context.Background(), brokerRequest)
 	if err != nil {
 		return fmt.Errorf("error al enviar el comando al broker: %v", err)
 	}
@@ -57,12 +58,20 @@ func (s *Supervisor) sendCommand(brokerAddress string, command string, args []st
 	}
 	defer connHextech.Close()
 
+	// Create a separate request for the Hextech Server
+	hextechRequest := &hextechpb.CommandRequest{
+		Command: command,
+		Args:    args,
+	}
+
+	// Call the Hextech Server
 	hextechClient := hextechpb.NewHextechServerClient(connHextech)
-	resp, err := hextechClient.ExecuteCommand(context.Background(), request)
+	resp, err := hextechClient.ExecuteCommand(context.Background(), hextechRequest)
 	if err != nil {
 		return fmt.Errorf("error al ejecutar el comando en el servidor Hextech: %v", err)
 	}
 
+	// Update the vector clock
 	s.lastKnownVectorClock[args[0]] = resp.VectorClock
 	fmt.Printf("Supervisor %d ejecutó comando en %s. Reloj vectorial actualizado: %v\n", s.id, serverAddress, resp.VectorClock)
 	return nil
@@ -71,7 +80,7 @@ func (s *Supervisor) sendCommand(brokerAddress string, command string, args []st
 func main() {
 	supervisor := &Supervisor{
 		id:                   1,
-		lastKnownVectorClock: make(map[string][]int),
+		lastKnownVectorClock: make(map[string][]int32),
 	}
 
 	rand.Seed(time.Now().UnixNano())
