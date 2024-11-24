@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package hexbroker;  // Use a valid package name
+package hex_s;  
 
-option go_package = "generated/hexbroker";  // Specify Go package path correctly
+option go_package = "generated/hex_s"; 
 
-service HexBroker {  // Service name should be in camel case
+service HexS {  
     rpc AddRecord (AddRecordRequest) returns (AddRecordResponse);
     rpc DeleteRecord (DeleteRecordRequest) returns (DeleteRecordResponse);
     rpc RenameRecord (RenameRecordRequest) returns (RenameRecordResponse);
@@ -13,7 +13,9 @@ service HexBroker {  // Service name should be in camel case
 
 message AddRecordRequest {
     string region = 1;
-    string record = 2;
+    string product = 2;
+    string value = 3;
+
 }
 
 message AddRecordResponse {
@@ -23,7 +25,6 @@ message AddRecordResponse {
 message DeleteRecordRequest {
     string region = 1;
     string product = 2;
-    int32 server_id = 3;
 }
 
 message DeleteRecordResponse {
@@ -43,8 +44,7 @@ message RenameRecordResponse {
 message UpdateRecordRequest {
     string region = 1;
     string product = 2;
-    double new_value = 3;
-    int32 server_id = 4;
+    string new_value = 3;
 }
 
 message UpdateRecordResponse {

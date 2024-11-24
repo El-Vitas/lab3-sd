@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	pb2 "hextech/generated/hex-broker"
-	pb "hextech/generated/hextech"
+	pb2 "hexServer2/generated/hex_s"
+	pb "hexServer2/generated/hextech"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -28,8 +28,9 @@ type server struct {
 	stopChan chan struct{}       // Canal para detener el servidor
 }
 
-var servers = []string{"localhost:50052", "localhost:50053"}
-var numServer = 0
+var servers = []string{"localhost:50051", "localhost:50052"}
+var numServer = 1
+var dominante = "localhost:50053"
 
 // Inicializa el servidor Hextech
 func newServer() *server {
@@ -60,7 +61,7 @@ func readFileAsLines(fileName string) ([]string, error) {
 }
 
 // Función para propagar cambios a otros servidores
-func (s *server) propagateChanges(merge bool) {
+func (s *server) propagateChanges() {
 	for {
 		select {
 		case <-s.stopChan:
@@ -76,43 +77,60 @@ func (s *server) propagateChanges(merge bool) {
 				}
 				client := pb.NewHextechClient(conn)
 
+				// Propagar los cambios de todas las regiones
 				for region, reloj := range s.regions {
 					s.mu.Lock()
 					changes := s.logs[region]
 					s.mu.Unlock()
 
-					if merge {
-						// Realizar merge con el servidor remoto
-						lines, err := readFileAsLines(region + ".txt")
-						if err != nil {
-							log.Printf("Error al leer el archivo %s: %v", region, err)
-						}
-						_, err = client.ReceiveFile(context.Background(), &pb.ReceiveFileRequest{
-							Region:     region,
-							LocalClock: convertToInt32Slice(reloj),
-							Text:       lines,
-						})
-						if err != nil {
-							log.Printf("Error al realizar merge con %s para la región %s: %v", addr, region, err)
-						}
-					} else {
-						// Enviar cambios
-						_, err := client.ReceiveChanges(context.Background(), &pb.ChangesRequest{
-							Region:     region,
-							LocalClock: convertToInt32Slice(reloj),
-							Changes:    changes,
-						})
-						if err != nil {
-							log.Printf("Error al enviar cambios a %s para la región %s: %v", addr, region, err)
-						}
-					}
+					_, err := client.ReceiveChanges(context.Background(), &pb.ChangesRequest{
+						Region:     region,
+						LocalClock: convertToInt32Slice(reloj),
+						Changes:    changes,
+					})
+					if err != nil {
+						log.Printf("Error al enviar cambios a %s para la región %s: %v", addr, region, err)
 
+					}
 				}
 				conn.Close()
 			}
+
 			s.logs = make(map[string][]string) // Limpiar los logs después de propagar
 			time.Sleep(30 * time.Second)       // Intervalo entre propagaciones
 		}
+	}
+}
+
+func (s *server) propagateMerge(region string) {
+	for _, addr := range servers {
+		conn, err := grpc.Dial(addr, grpc.WithInsecure())
+		if err != nil {
+			log.Printf("Error al conectar con el servidor %s: %v", addr, err)
+			continue
+		}
+		client := pb.NewHextechClient(conn)
+
+		// Propagar el merge solo para la región pasada como parámetro
+		s.mu.Lock()
+		localClock := s.regions[region]
+		s.mu.Unlock()
+
+		// Realizar merge con el servidor remoto
+		lines, err := readFileAsLines(region + ".txt")
+		if err != nil {
+			log.Printf("Error al leer el archivo %s: %v", region, err)
+		}
+		_, err = client.ReceiveFile(context.Background(), &pb.ReceiveFileRequest{
+			Region:     region,
+			LocalClock: convertToInt32Slice(localClock),
+			Text:       lines,
+		})
+		if err != nil {
+			log.Printf("Error al realizar merge con %s para la región %s: %v", addr, region, err)
+		}
+		s.logs = make(map[string][]string)
+		conn.Close()
 	}
 }
 
@@ -139,7 +157,6 @@ func (s *server) ReceiveFile(ctx context.Context, req *pb.ReceiveFileRequest) (*
 	// Actualizar el reloj de la región
 	s.regions[region] = convertToIntSlice(remoteClock)
 
-	// Responder que la operación fue exitosa
 	return &pb.ReceiveFileResponse{
 		Region:      region,
 		VectorClock: convertToInt32Slice(s.regions[region]),
@@ -168,7 +185,7 @@ func (s *server) ReceiveChanges(ctx context.Context, req *pb.ChangesRequest) (*p
 
 	if conflict {
 		// Realizar merge si hay conflictos
-		conn, err := grpc.Dial("direccion_del_nodo_dominante", grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.Dial(dominante, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			log.Fatalf("Error al conectar con el nodo dominante: %v", err)
 		}
@@ -185,6 +202,16 @@ func (s *server) ReceiveChanges(ctx context.Context, req *pb.ChangesRequest) (*p
 			log.Printf("Error al realizar merge con el nodo dominante: %v", err)
 		}
 
+		// _, err := s.MergeChanges(context.Background(), &pb.MergeChangesRequest{
+		// 	Region:      region,
+		// 	LocalClockA: convertToInt32Slice(localClock),
+		// 	LocalClockB: remoteClock,
+		// 	LogA:        s.logs[region],
+		// 	LogB:        changes,
+		// })
+		// if err != nil {
+		// 	log.Printf("Error al realizar merge con el nodo dominante: %v", err)
+		// }
 	} else {
 		// Aplicar cambios directamente si no hay conflictos
 		for range changes {
@@ -231,9 +258,9 @@ func (s *server) MergeChanges(ctx context.Context, req *pb.MergeChangesRequest) 
 	logA := req.LogA
 	logB := req.LogB
 
-	log.Printf("Realizando merge para las region %s", region)
+	log.Printf("Realizando merge para la región %s", region)
 
-	//Realizar el merge de los relojes vectoriales
+	// Realizar el merge de los relojes vectoriales
 	for i := range localClockA {
 		if localClockB[i] > localClockA[i] {
 			if localClockB[i] > int32(s.regions[region][i]) {
@@ -246,7 +273,7 @@ func (s *server) MergeChanges(ctx context.Context, req *pb.MergeChangesRequest) 
 		}
 	}
 
-	//Procesar los cambios de A
+	// Procesar los cambios de A
 	for _, change := range logA {
 		parts := strings.Fields(change)
 		if len(parts) < 2 {
@@ -329,7 +356,10 @@ func (s *server) MergeChanges(ctx context.Context, req *pb.MergeChangesRequest) 
 		}
 	}
 
-	//Devolver true como respuesta
+	// Llamar a propagateChanges después de realizar el merge
+	go s.propagateMerge(region)
+
+	// Devolver respuesta
 	return &pb.MergeChangesResponse{
 		Region:      region, // O alguna lógica para elegir la región principal
 		VectorClock: convertToInt32Slice(s.regions[region]),
@@ -430,7 +460,8 @@ func (s *server) getOrCreateRegion(region string) []int {
 // Función que se encarga de actualizar el reloj vectorial y registrar la operación en el log
 func (s *server) AddRecord(ctx context.Context, req *pb2.AddRecordRequest) (*pb2.AddRecordResponse, error) {
 	region := req.Region
-	record := req.Record
+	product := req.Product
+	value := req.Value
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -441,11 +472,11 @@ func (s *server) AddRecord(ctx context.Context, req *pb2.AddRecordRequest) (*pb2
 	reloj[numServer]++
 
 	// Registra la operación en el log
-	s.logs[region] = append(s.logs[region], fmt.Sprintf("AgregarProducto %s %s", region, record))
-	log.Printf("Registro agregado: %s en la región %s", record, region)
+	s.logs[region] = append(s.logs[region], fmt.Sprintf("AgregarProducto %s %s %s", region, product, value))
+	log.Printf("Registro agregado: en la región %s", region)
 
 	// Llama a la función add para escribir el registro en el archivo
-	if err := add(region, record); err != nil {
+	if err := add(region, fmt.Sprintf("%s %s %s", region, product, value)); err != nil {
 		return nil, err
 	}
 
@@ -683,7 +714,7 @@ func convertToInt32Slice(intSlice []int) []int32 {
 
 // Función principal para configurar y ejecutar el servidor
 func main() {
-	lis, err := net.Listen("tcp", ":50051") // Cambia el puerto si es necesario
+	lis, err := net.Listen("tcp", ":50052") // Cambia el puerto si es necesario
 	if err != nil {
 		log.Fatalf("Error al iniciar el servidor: %v", err)
 	}
@@ -695,9 +726,9 @@ func main() {
 	pb.RegisterHextechServer(s, hexServer)
 
 	// Ejecuta la propagación de cambios en una rutina separada
-	go hexServer.propagateChanges(false)
+	go hexServer.propagateChanges()
 
-	log.Println("Servidor Hextech corriendo en el puerto :50051")
+	log.Println("Servidor Hextech corriendo en el puerto :50052")
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("Error al servir: %v", err)
 	}

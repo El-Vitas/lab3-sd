@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package broker;
+
+option go_package = "generated/broker-s";
+
+service Broker {
+  // Enviar un comando al Broker para obtener la dirección del servidor Hextech
+  rpc RouteCommand (CommandRequest) returns (CommandResponse);
+}
+
+// Mensaje para solicitar la ruta del comando
+message CommandRequest {
+  string command = 1; // Tipo de comando
+  repeated string args = 2; // Argumentos del comando
+}
+
+// Respuesta del Broker con la dirección del servidor
+message CommandResponse {
+  string server_address = 1; // Dirección del servidor Hextech seleccionado
+}
