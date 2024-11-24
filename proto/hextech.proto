@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package hextech;
+
+option go_package = "generated/HextechServer";
+
+service HextechServer {
+  // Ejecutar un comando en el Servidor Hextech
+  rpc ExecuteCommand (CommandRequest) returns (CommandResponse);
+}
+
+// Mensaje de solicitud para ejecutar un comando
+message CommandRequest {
+  string command = 1; // Tipo de comando
+  repeated string args = 2; // Argumentos del comando
+}
+
+// Respuesta del servidor Hextech
+message CommandResponse {
+  repeated int32 vector_clock = 1; // Reloj vectorial actualizado
+  string message = 2; // Mensaje de confirmación o error
+}
