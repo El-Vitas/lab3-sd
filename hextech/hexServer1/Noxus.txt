@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 Vino 15
 pistola 3
 pepito 2
 papa 12adsa 10
 adjsda 11
+=======
+C 100
+>>>>>>> 68bd88f (commit jayce)

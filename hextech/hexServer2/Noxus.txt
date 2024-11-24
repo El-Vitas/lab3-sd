@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Vino 15
 pistola 3
 pepito 2
@@ -5,3 +6,15 @@ papa 12adsa 10
 adjsda 11
 adsa 10
 adjsda 11
+=======
+Comida 10
+Comida 10
+Agua 10
+Agua 10
+Vino 10
+Vino 10
+Vino 10
+C 100
+C 10
+C 100
+>>>>>>> 68bd88f (commit jayce)

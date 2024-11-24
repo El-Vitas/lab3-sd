@@ -9,6 +9,7 @@ service HexS {
     rpc DeleteRecord (DeleteRecordRequest) returns (DeleteRecordResponse);
     rpc RenameRecord (RenameRecordRequest) returns (RenameRecordResponse);
     rpc UpdateRecordValue (UpdateRecordRequest) returns (UpdateRecordResponse);
+    rpc GetData (GetDataRequest) returns (GetDataResponse);
 }
 
 message AddRecordRequest {
@@ -49,4 +50,14 @@ message UpdateRecordRequest {
 
 message UpdateRecordResponse {
     repeated int32 vector_clock = 1;
+}
+
+message GetDataRequest {
+  string region = 1;
+  string product = 2;
+}
+
+message GetDataResponse {
+  repeated int32 vector_clock = 1;
+  int32 quantity = 2;
 }

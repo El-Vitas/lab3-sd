@@ -23,6 +23,7 @@ const (
 	HexS_DeleteRecord_FullMethodName      = "/hex_s.HexS/DeleteRecord"
 	HexS_RenameRecord_FullMethodName      = "/hex_s.HexS/RenameRecord"
 	HexS_UpdateRecordValue_FullMethodName = "/hex_s.HexS/UpdateRecordValue"
+	HexS_GetData_FullMethodName           = "/hex_s.HexS/GetData"
 )
 
 // HexSClient is the client API for HexS service.
@@ -33,6 +34,7 @@ type HexSClient interface {
 	DeleteRecord(ctx context.Context, in *DeleteRecordRequest, opts ...grpc.CallOption) (*DeleteRecordResponse, error)
 	RenameRecord(ctx context.Context, in *RenameRecordRequest, opts ...grpc.CallOption) (*RenameRecordResponse, error)
 	UpdateRecordValue(ctx context.Context, in *UpdateRecordRequest, opts ...grpc.CallOption) (*UpdateRecordResponse, error)
+	GetData(ctx context.Context, in *GetDataRequest, opts ...grpc.CallOption) (*GetDataResponse, error)
 }
 
 type hexSClient struct {
@@ -83,6 +85,16 @@ func (c *hexSClient) UpdateRecordValue(ctx context.Context, in *UpdateRecordRequ
 	return out, nil
 }
 
+func (c *hexSClient) GetData(ctx context.Context, in *GetDataRequest, opts ...grpc.CallOption) (*GetDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDataResponse)
+	err := c.cc.Invoke(ctx, HexS_GetData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HexSServer is the server API for HexS service.
 // All implementations must embed UnimplementedHexSServer
 // for forward compatibility.
@@ -91,6 +103,7 @@ type HexSServer interface {
 	DeleteRecord(context.Context, *DeleteRecordRequest) (*DeleteRecordResponse, error)
 	RenameRecord(context.Context, *RenameRecordRequest) (*RenameRecordResponse, error)
 	UpdateRecordValue(context.Context, *UpdateRecordRequest) (*UpdateRecordResponse, error)
+	GetData(context.Context, *GetDataRequest) (*GetDataResponse, error)
 	mustEmbedUnimplementedHexSServer()
 }
 
@@ -112,6 +125,9 @@ func (UnimplementedHexSServer) RenameRecord(context.Context, *RenameRecordReques
 }
 func (UnimplementedHexSServer) UpdateRecordValue(context.Context, *UpdateRecordRequest) (*UpdateRecordResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateRecordValue not implemented")
+}
+func (UnimplementedHexSServer) GetData(context.Context, *GetDataRequest) (*GetDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetData not implemented")
 }
 func (UnimplementedHexSServer) mustEmbedUnimplementedHexSServer() {}
 func (UnimplementedHexSServer) testEmbeddedByValue()              {}
@@ -206,6 +222,24 @@ func _HexS_UpdateRecordValue_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HexS_GetData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HexSServer).GetData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HexS_GetData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HexSServer).GetData(ctx, req.(*GetDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HexS_ServiceDesc is the grpc.ServiceDesc for HexS service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -228,6 +262,10 @@ var HexS_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateRecordValue",
 			Handler:    _HexS_UpdateRecordValue_Handler,
+		},
+		{
+			MethodName: "GetData",
+			Handler:    _HexS_GetData_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

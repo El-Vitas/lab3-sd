@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -765,6 +766,70 @@ func convertToInt32Slice(intSlice []int) []int32 {
 		int32Slice[i] = int32(v)
 	}
 	return int32Slice
+}
+
+func (s *server) GetData(ctx context.Context, req *pb2.GetDataRequest) (*pb2.GetDataResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	region := req.Region
+	product := req.Product
+
+	// Verificar si la región existe
+	if _, exists := s.regions[region]; !exists {
+		return nil, fmt.Errorf("la región %s no existe", region)
+	}
+
+	// Leer el archivo asociado con la región
+	fileName := fmt.Sprintf("%s.txt", region)
+	file, err := os.Open(fileName)
+	scanner := bufio.NewScanner(file)
+	if err != nil {
+		log.Printf("Error al abrir el archivo para la región %s: %v", region, err)
+		return nil, fmt.Errorf("error al abrir el archivo de la región: %v", err)
+	}
+	defer file.Close()
+
+	// Buscar el producto dentro del archivo
+	var productValue int = 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line) // Divide la línea en partes
+
+		if len(parts) >= 2 && parts[0] == product { // Verifica si el producto coincide
+			// Convierte la cantidad del producto a entero
+			if quantity, err := strconv.Atoi(parts[1]); err == nil {
+				productValue = quantity
+			} else {
+				log.Printf("Error al convertir cantidad: %v", err)
+			}
+			break // Detiene la búsqueda después de encontrar el primer registro
+		}
+	}
+
+	// Manejo de errores durante el escaneo
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error al leer el archivo: %v", err)
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error al leer el archivo para la región %s: %v", region, err)
+		return nil, fmt.Errorf("error al leer el archivo de la región: %v", err)
+	}
+
+	// Si el producto no fue encontrado
+	if productValue == 0 {
+		return nil, fmt.Errorf("el producto %s no existe en la región %s", product, region)
+	}
+
+	// Construir la respuesta con el valor del producto y el reloj vectorial de la región
+	response := &pb2.GetDataResponse{
+		Quantity:    int32(productValue), // Asume que el archivo no tiene información adicional como "cantidad"
+		VectorClock: convertToInt32Slice(s.regions[region]),
+	}
+
+	log.Printf("Datos enviados: Región=%s, Producto=%s, Valor=%s, VectorClock=%v", region, product, productValue, s.regions[region])
+	return response, nil
 }
 
 // Función principal para configurar y ejecutar el servidor
