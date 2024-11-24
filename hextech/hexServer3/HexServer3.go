@@ -25,6 +25,7 @@ type server struct {
 	regions  map[string][]int    // Mapa de regiones con sus relojes vectoriales
 	logs     map[string][]string // Mapa para almacenar logs de cada región
 	stopChan chan struct{}       // Canal para detener el servidor
+	pb2.UnimplementedHexSServer
 }
 
 var servers = []string{"localhost:50051", "localhost:50052"}
@@ -66,7 +67,7 @@ func (s *server) propagateChanges() {
 			return
 		default:
 			// Simula la propagación de cambios a otros servidores
-
+			fmt.Printf("Propagando cambios a otros servidores...\n")
 			for _, addr := range servers {
 				conn, err := grpc.Dial(addr, grpc.WithInsecure())
 				if err != nil {
@@ -74,7 +75,7 @@ func (s *server) propagateChanges() {
 					continue
 				}
 				client := pb.NewHextechClient(conn)
-
+				fmt.Print("Propagando a ", addr, "\n")
 				// Propagar los cambios de todas las regiones
 				for region, reloj := range s.regions {
 					s.mu.Lock()
@@ -101,6 +102,7 @@ func (s *server) propagateChanges() {
 }
 
 func (s *server) propagateMerge(region string) {
+	fmt.Print("Propagando merge a otros servidores...\n")
 	for _, addr := range servers {
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
 		if err != nil {
@@ -114,6 +116,7 @@ func (s *server) propagateMerge(region string) {
 		localClock := s.regions[region]
 		s.mu.Unlock()
 
+		fmt.Printf("Propagando merge a %s para la reg %s\n", addr, region)
 		// Realizar merge con el servidor remoto
 		lines, err := readFileAsLines(region + ".txt")
 		if err != nil {
@@ -143,6 +146,7 @@ func (s *server) ReceiveFile(ctx context.Context, req *pb.ReceiveFileRequest) (*
 	remoteClock := req.LocalClock
 	fileContent := req.Text // Suponiendo que Text es el contenido del archivo como un string
 
+	fmt.Printf("Recibiendo archivo de merge para la región %s\n", region)
 	// Actualizar el archivo de la región
 	fileName := fmt.Sprintf("%s.txt", region)
 	content := strings.Join(fileContent, "\n")
@@ -154,6 +158,9 @@ func (s *server) ReceiveFile(ctx context.Context, req *pb.ReceiveFileRequest) (*
 
 	// Actualizar el reloj de la región
 	s.regions[region] = convertToIntSlice(remoteClock)
+
+	fmt.Printf("Archivo recibido y reloj actualizado para la región %s\n", region)
+	fmt.Printf("Numero de reloj: %v\n", s.regions[region])
 
 	return &pb.ReceiveFileResponse{
 		Region:      region,
@@ -182,6 +189,7 @@ func (s *server) ReceiveChanges(ctx context.Context, req *pb.ChangesRequest) (*p
 	}
 
 	if conflict {
+		fmt.Printf("Conflicto detectado en la región %s\n", region)
 		// // Realizar merge si hay conflictos
 		// conn, err := grpc.Dial("direccion_del_nodo_dominante", grpc.WithTransportCredentials(insecure.NewCredentials()))
 		// if err != nil {
@@ -211,6 +219,7 @@ func (s *server) ReceiveChanges(ctx context.Context, req *pb.ChangesRequest) (*p
 			log.Printf("Error al realizar merge con el nodo dominante: %v", err)
 		}
 	} else {
+		fmt.Printf("Aplicando cambios directamente en la región %s\n", region)
 		// Aplicar cambios directamente si no hay conflictos
 		for range changes {
 			s.applyChange(region, convertToInt32Slice(localClock), remoteClock, changes)
@@ -249,6 +258,7 @@ func (s *server) recordExists(region string, record string) bool {
 }
 
 // Función para hacer merge en caso de conflictos
+
 func (s *server) MergeChanges(ctx context.Context, req *pb.MergeChangesRequest) (*pb.MergeChangesResponse, error) {
 	region := req.Region
 	localClockA := req.LocalClockA
@@ -257,6 +267,11 @@ func (s *server) MergeChanges(ctx context.Context, req *pb.MergeChangesRequest) 
 	logB := req.LogB
 
 	log.Printf("Realizando merge para la región %s", region)
+
+	if len(s.regions[region]) == 0 {
+		// Inicializar el slice con el tamaño necesario si está vacío
+		s.regions[region] = make([]int, len(localClockA))
+	}
 
 	// Realizar el merge de los relojes vectoriales
 	for i := range localClockA {
@@ -272,88 +287,98 @@ func (s *server) MergeChanges(ctx context.Context, req *pb.MergeChangesRequest) 
 	}
 
 	// Procesar los cambios de A
-	for _, change := range logA {
-		parts := strings.Fields(change)
-		if len(parts) < 2 {
-			log.Printf("Cambio inválido en la región %s: %s", region, change)
-			continue
-		}
-
-		action := parts[0]
-		switch action {
-		case "AgregarProducto":
-			if len(parts) < 3 {
-				log.Printf("Cambio inválido para 'AgregarProducto' en la región %s: %s", region, change)
+	if len(logA) > 0 { // Validar si logA no está vacío
+		for _, change := range logA {
+			parts := strings.Fields(change)
+			if len(parts) < 2 {
+				log.Printf("Cambio inválido en la región %s: %s", region, change)
 				continue
 			}
-			record := strings.Join(parts[2:], " ")
-			if !s.recordExists(region, record) {
-				err := add(region, record)
-				if err != nil {
-					log.Printf("Error al agregar registro en la región %s: %v", region, err)
-				}
-			}
 
-		case "BorrarProducto":
-			if len(parts) < 3 {
-				log.Printf("Cambio inválido para 'BorrarProducto' en la región %s: %s", region, change)
-				continue
-			}
-			product := parts[2]
-			if s.recordExists(region, product) {
-				err := delete(region, product)
-				if err != nil {
-					log.Printf("Error al borrar producto en la región %s: %v", region, err)
+			action := parts[0]
+			switch action {
+			case "AgregarProducto":
+				if len(parts) < 3 {
+					log.Printf("Cambio inválido para 'AgregarProducto' en la región %s: %s", region, change)
+					continue
 				}
-			} else {
-				log.Printf("El producto no existe en la región %s: %s", region, product)
+				record := strings.Join(parts[2:], " ")
+				if !s.recordExists(region, record) {
+					err := add(region, record)
+					if err != nil {
+						log.Printf("Error al agregar registro en la región %s: %v", region, err)
+					}
+				}
+
+			case "BorrarProducto":
+				if len(parts) < 3 {
+					log.Printf("Cambio inválido para 'BorrarProducto' en la región %s: %s", region, change)
+					continue
+				}
+				product := parts[2]
+				if s.recordExists(region, product) {
+					err := delete(region, product)
+					if err != nil {
+						log.Printf("Error al borrar producto en la región %s: %v", region, err)
+					}
+				} else {
+					log.Printf("El producto no existe en la región %s: %s", region, product)
+				}
 			}
 		}
+	} else {
+		log.Printf("No se encontraron cambios en logA para la región %s", region)
 	}
 
 	// Procesar los cambios de B
-	for _, change := range logB {
-		parts := strings.Fields(change)
-		if len(parts) < 2 {
-			log.Printf("Cambio inválido en la región %s: %s", region, change)
-			continue
-		}
-
-		action := parts[0]
-		switch action {
-		case "AgregarProducto":
-			if len(parts) < 3 {
-				log.Printf("Cambio inválido para 'AgregarProducto' en la región %s: %s", region, change)
+	if len(logB) > 0 { // Validar si logB no está vacío
+		for _, change := range logB {
+			parts := strings.Fields(change)
+			if len(parts) < 2 {
+				log.Printf("Cambio inválido en la región %s: %s", region, change)
 				continue
 			}
-			record := strings.Join(parts[2:], " ")
-			if !s.recordExists(region, record) {
-				err := add(region, record)
-				if err != nil {
-					log.Printf("Error al agregar registro en la región %s: %v", region, err)
-				}
-			}
 
-		case "BorrarProducto":
-			if len(parts) < 3 {
-				log.Printf("Cambio inválido para 'BorrarProducto' en la región %s: %s", region, change)
-				continue
-			}
-			product := parts[2]
-			if s.recordExists(region, product) {
-				err := delete(region, product)
-				if err != nil {
-					log.Printf("Error al borrar producto en la región %s: %v", region, err)
+			action := parts[0]
+			switch action {
+			case "AgregarProducto":
+				if len(parts) < 3 {
+					log.Printf("Cambio inválido para 'AgregarProducto' en la región %s: %s", region, change)
+					continue
 				}
-			} else {
-				log.Printf("El producto no existe en la región %s: %s", region, product)
-			}
+				record := strings.Join(parts[2:], " ")
+				if !s.recordExists(region, record) {
+					err := add(region, record)
+					if err != nil {
+						log.Printf("Error al agregar registro en la región %s: %v", region, err)
+					}
+				}
 
-		default:
-			log.Printf("Acción no reconocida en la región %s: %s", region, action)
+			case "BorrarProducto":
+				if len(parts) < 3 {
+					log.Printf("Cambio inválido para 'BorrarProducto' en la región %s: %s", region, change)
+					continue
+				}
+				product := parts[2]
+				if s.recordExists(region, product) {
+					err := delete(region, product)
+					if err != nil {
+						log.Printf("Error al borrar producto en la región %s: %v", region, err)
+					}
+				} else {
+					log.Printf("El producto no existe en la región %s: %s", region, product)
+				}
+
+			default:
+				log.Printf("Acción no reconocida en la región %s: %s", region, action)
+			}
 		}
+	} else {
+		log.Printf("No se encontraron cambios en logB para la región %s", region)
 	}
 
+	fmt.Print("Merge realizado con éxito\n")
+	fmt.Printf("Numero de reloj: %v\n", s.regions[region])
 	// Llamar a propagateChanges después de realizar el merge
 	go s.propagateMerge(region)
 
@@ -438,9 +463,7 @@ func (s *server) applyChange(region string, localClock, remoteClock []int32, cha
 
 // Función para obtener o inicializar un reloj vectorial para una región
 func (s *server) getOrCreateRegion(region string) []int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	fmt.Println("Obteniendo o creando reloj vectorial y archivo para la región", region)
 	if _, exists := s.regions[region]; !exists {
 		// Inicializa un reloj vectorial [0, 0, 0] para la nueva región
 		s.regions[region] = []int{0, 0, 0}
@@ -474,10 +497,10 @@ func (s *server) AddRecord(ctx context.Context, req *pb2.AddRecordRequest) (*pb2
 	log.Printf("Registro agregado: en la región %s", region)
 
 	// Llama a la función add para escribir el registro en el archivo
-	if err := add(region, fmt.Sprintf("%s %s %s", region, product, value)); err != nil {
+	if err := add(region, fmt.Sprintf("%s %s", product, value)); err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("Numero de reloj: %v\n", reloj)
 	// Devuelve el reloj vectorial actualizado
 	return &pb2.AddRecordResponse{
 		VectorClock: convertToInt32Slice(reloj),
@@ -493,12 +516,23 @@ func add(region, record string) error {
 		return err
 	}
 	defer file.Close()
+	product := strings.Fields(record)[0]
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[0] == product {
+			// Si el producto ya existe en el archivo, no lo agregamos
+			log.Printf("El registro ya existe en la región %s: %s", region, record)
+			return nil
+		}
+	}
 
 	if _, err := file.WriteString(record + "\n"); err != nil {
 		log.Printf("Error al escribir en el archivo para la región %s: %v", region, err)
 		return err
 	}
-
+	fmt.Printf("Producto agregado: %s en la región %s\n", record, region)
 	return nil
 }
 
@@ -514,12 +548,13 @@ func (s *server) DeleteRecord(ctx context.Context, req *pb2.DeleteRecordRequest)
 	// Actualiza el reloj vectorial
 	reloj[numServer]++
 
+	log.Printf("Borrando producto: %s en la región %s", product, region)
 	// Llama a la función 'delete' para borrar el registro
 	err := delete(region, product)
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("Numero de reloj: %v\n", reloj)
 	// Devuelve el reloj vectorial actualizado
 	return &pb2.DeleteRecordResponse{
 		VectorClock: convertToInt32Slice(reloj),
@@ -559,7 +594,6 @@ func delete(region string, product string) error {
 
 	// Registra la operación en el log
 	log.Printf("Producto borrado: %s en la región %s", product, region)
-
 	return nil
 }
 
@@ -576,12 +610,13 @@ func (s *server) RenameRecord(ctx context.Context, req *pb2.RenameRecordRequest)
 	// Actualiza el reloj vectorial
 	reloj[numServer]++
 
+	fmt.Printf("Renombrando producto: %s a %s en la región %s\n", oldProduct, newProduct, region)
 	// Llama a la función 'rename' para renombrar el producto
 	err := rename(region, oldProduct, newProduct)
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("Numero de reloj: %v\n", reloj)
 	// Devuelve el reloj vectorial actualizado
 	return &pb2.RenameRecordResponse{
 		VectorClock: convertToInt32Slice(reloj),
@@ -637,13 +672,13 @@ func (s *server) UpdateRecordValue(ctx context.Context, req *pb2.UpdateRecordReq
 
 	// Actualiza el reloj vectorial
 	reloj[numServer]++
-
+	fmt.Printf("Actualizando valor del producto: %s a %s en la región %s\n", product, newValue, region)
 	// Llama a la función 'updateValue' para actualizar el valor del producto
 	err := updateValue(region, product, fmt.Sprintf("%f", newValue))
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Printf("Numero de reloj: %v\n", reloj)
 	// Devuelve el reloj vectorial actualizado
 	return &pb2.UpdateRecordResponse{
 		VectorClock: convertToInt32Slice(reloj),
@@ -721,7 +756,8 @@ func main() {
 	hexServer := newServer()
 
 	// Registro del servidor gRPC
-	pb.RegisterHextechServer(s, hexServer)
+	pb.RegisterHextechServer(s, hexServer) // Servicio para sincronización entre servidores
+	pb2.RegisterHexSServer(s, hexServer)
 
 	// Ejecuta la propagación de cambios en una rutina separada
 	go hexServer.propagateChanges()

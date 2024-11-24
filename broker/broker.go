@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -23,7 +24,7 @@ var servers = []string{"localhost:50051", "localhost:50052", "localhost:50053"}
 // Maneja la solicitud RouteCommand
 func (s *BrokerServer) RouteCommand(ctx context.Context, req *broker.CommandRequest) (*broker.CommandResponse, error) {
 	// Aquí se pueden manejar los comandos específicos, por ejemplo:
-
+	fmt.Print("Solicitud de dirección de servidor recibida\n")
 	// Selecciona un servidor aleatorio
 	rand.Seed(time.Now().UnixNano())
 	serverIndex := rand.Intn(len(servers))
@@ -32,7 +33,7 @@ func (s *BrokerServer) RouteCommand(ctx context.Context, req *broker.CommandRequ
 	response := &broker.CommandResponse{
 		ServerAddress: servers[serverIndex],
 	}
-
+	fmt.Printf("Dirección del servidor seleccionado: %s\n", servers[serverIndex])
 	return response, nil
 
 }
