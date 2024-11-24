@@ -132,7 +132,7 @@ func (s *server) propagateMerge(region string) {
 		if err != nil {
 			log.Printf("Error al realizar merge con %s para la región %s: %v", addr, region, err)
 		}
-		s.logs = make(map[string][]string)
+		s.logs[region] = make([]string, 0) // Limpiar los logs después de propagar
 		conn.Close()
 	}
 }
@@ -164,6 +164,7 @@ func (s *server) ReceiveFile(ctx context.Context, req *pb.ReceiveFileRequest) (*
 	fmt.Printf("Archivo recibido y reloj actualizado para la región %s\n", region)
 	fmt.Printf("Numero de reloj: %v\n", s.regions[region])
 
+	s.logs[region] = make([]string, 0) // Limpiar los logs después de recibir el archivo
 	return &pb.ReceiveFileResponse{
 		Region:      region,
 		VectorClock: convertToInt32Slice(s.regions[region]),
@@ -183,10 +184,20 @@ func (s *server) ReceiveChanges(ctx context.Context, req *pb.ChangesRequest) (*p
 
 	// Detectar conflictos en el reloj vectorial
 	conflict := false
+	cont := 0
 	for i := range localClock {
 		if remoteClock[i] > int32(localClock[i]) {
-			conflict = true
-			break
+			if cont < 0 {
+				conflict = true
+				break
+			}
+			cont++
+		} else if remoteClock[i] < int32(localClock[i]) {
+			if cont > 0 {
+				conflict = true
+				break
+			}
+			cont--
 		}
 	}
 
@@ -220,11 +231,11 @@ func (s *server) ReceiveChanges(ctx context.Context, req *pb.ChangesRequest) (*p
 		// if err != nil {
 		// 	log.Printf("Error al realizar merge con el nodo dominante: %v", err)
 		// }
-	} else {
+	} else if cont > 0 { // Si el reloj remoto es mayor aplicamos lo cambios directamente, caso contrario ignoramos
 		fmt.Printf("Aplicando cambios directamente en la región %s\n", region)
 		// Aplicar cambios directamente si no hay conflictos
 		for range changes {
-			s.applyChange(region, convertToInt32Slice(localClock), remoteClock, changes)
+			s.applyChange(region, remoteClock, changes)
 		}
 	}
 
@@ -390,15 +401,15 @@ func (s *server) MergeChanges(ctx context.Context, req *pb.MergeChangesRequest) 
 	}, nil
 }
 
-func (s *server) applyChange(region string, localClock, remoteClock []int32, changes []string) {
+func (s *server) applyChange(region string, remoteClock []int32, changes []string) {
 	// Sincronizar el reloj vectorial
-	for i := range localClock {
-		if remoteClock[i] > localClock[i] {
-			localClock[i] = remoteClock[i]
+	for i := range s.regions[region] {
+		if remoteClock[i] > int32(s.regions[region][i]) {
+			s.regions[region][i] = int(remoteClock[i])
 		}
 	}
 	// Ajustar el índice local
-	localClock[0]--
+	s.regions[region][numServer]--
 
 	// Procesar cada cambio recibido
 	for _, change := range changes {
@@ -510,29 +521,41 @@ func (s *server) AddRecord(ctx context.Context, req *pb2.AddRecordRequest) (*pb2
 
 // Función que se encarga de escribir el registro en el archivo correspondiente
 func add(region, record string) error {
-	// Escribe el registro en el archivo correspondiente
-	file, err := os.OpenFile(fmt.Sprintf("%s.txt", region), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// Abre el archivo en modo lectura para verificar si el producto ya existe
+	file, err := os.Open(fmt.Sprintf("%s.txt", region)) // Solo lectura
 	if err != nil {
 		log.Printf("Error al abrir el archivo para la región %s: %v", region, err)
 		return err
 	}
-	defer file.Close()
+
 	product := strings.Fields(record)[0]
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 		parts := strings.Fields(line)
 		if len(parts) >= 2 && parts[0] == product {
-			// Si el producto ya existe en el archivo, no lo agregamos
+			// Si el producto ya existe, no lo agregamos
 			log.Printf("El registro ya existe en la región %s: %s", region, record)
 			return nil
 		}
 	}
+	file.Close()
 
-	if _, err := file.WriteString(record + "\n"); err != nil {
+	// Si no existe, abrimos el archivo nuevamente en modo escritura
+	file, err = os.OpenFile(fmt.Sprintf("%s.txt", region), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Error al abrir el archivo para la región %s: %v", region, err)
+		return err
+	}
+	defer file.Close()
+
+	// Escribir el nuevo registro al final del archivo
+	recordWithNewLine := record + "\n"
+	if _, err := file.WriteString(recordWithNewLine); err != nil {
 		log.Printf("Error al escribir en el archivo para la región %s: %v", region, err)
 		return err
 	}
+
 	fmt.Printf("Producto agregado: %s en la región %s\n", record, region)
 	return nil
 }
