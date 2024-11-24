@@ -17,4 +17,8 @@ Vino 10
 C 100
 C 10
 C 100
+<<<<<<< HEAD
 >>>>>>> 68bd88f (commit jayce)
+=======
+C 100
+>>>>>>> 186a4dd (commit jayce)
