@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	brokerAddress = "localhost:50054" // Dirección del servidor Broker
+	brokerAddress = "dist101:50054" // Dirección del servidor Broker
 )
 
 type Supervisor struct {

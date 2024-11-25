@@ -11,6 +11,8 @@
   + En la maquina virtual 4 (MV4): Hex server 1 y Jayce
 - Para los casos que requieren input seguir el mismo formato que se les pide en los print. En el caso de los supervisores las opciones se acceden escribiendo la opcion tal cuál es. Por ejemplo: 'AgregarProducto'
   
+## Sobre el codigo
+Para la manera de manejar el merge se tiene un server hextech dominante. Cuando se encuentra un conflicto se llama a este server y el verifica el problema de consistencia que existe. Este va comparando los logs y si ve algo nuevo que añadir que el no tiene, lo añade. Si tiene que borrar algo, lo borra, pero no realiza actualizaciones ni de titulo ni de valor en caso de inconsistencia.
 ## Para la ejecución
 - Los docker utilizan docker compose up
 - Estos docker son ejecutados mediante un makefile.

@@ -19,7 +19,7 @@ type BrokerServer struct {
 	broker.UnimplementedBrokerServer
 }
 
-var servers = []string{"localhost:50051", "localhost:50052", "localhost:50053"}
+var servers = []string{"dist104:50051", "dist102:50052", "dist103:50053"}
 
 // Maneja la solicitud RouteCommand
 func (s *BrokerServer) RouteCommand(ctx context.Context, req *broker.CommandRequest) (*broker.CommandResponse, error) {

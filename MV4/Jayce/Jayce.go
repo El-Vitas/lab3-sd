@@ -113,7 +113,7 @@ func (j *Jayce) sendCommand(brokerAddress, region, product string) error {
 
 func main() {
 	// Address of the Broker
-	brokerAddress := "localhost:50054"
+	brokerAddress := "dist101:50054"
 
 	// Connect to the Broker
 	connBroker, brokerClient, err := connectToBroker(brokerAddress)

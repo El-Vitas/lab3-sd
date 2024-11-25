@@ -30,9 +30,9 @@ type server struct {
 	pb2.UnimplementedHexSServer
 }
 
-var servers = []string{"localhost:50051", "localhost:50053"}
+var servers = []string{"dist104:50051", "dist103:50053"}
 var numServer = 1
-var dominante = "localhost:50053"
+var dominante = "dist103:50053"
 
 // Inicializa el servidor Hextech
 func newServer() *server {

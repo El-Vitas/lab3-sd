@@ -29,7 +29,7 @@ type server struct {
 	pb2.UnimplementedHexSServer
 }
 
-var servers = []string{"localhost:50051", "localhost:50052"}
+var servers = []string{"dist104:50051", "dist102:50052"}
 var numServer = 2
 
 // Inicializa el servidor Hextech
