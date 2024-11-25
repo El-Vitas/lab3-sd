@@ -3,7 +3,7 @@
 + Jonathan Olivares, 202073096-2
 
 ## Sobre el uso:
-- El servicio de los supervisores, tanto el 1 como el 2 requieren que se le entregue una datos por consola, al igual que jayce.
+- El servicio de los supervisores, tanto el 1 como el 2 requieren que se le entregue datos por consola, al igual que jayce.
 - La distribución de los servicios es la siguiente:
   + En la maquina virtual 1 (MV1): Broker
   + En la maquina virtual 2 (MV2): Hex server 2 y Supervisor hex 2
