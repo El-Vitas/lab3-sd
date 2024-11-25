@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  hexserver1:
+    build: ./hexServer1
+    container_name: hexserver1_service
+    network_mode: "host"
+    ports:
+      - "50051:50051"
+    
+  jayce:
+    build: ./Jayce
+    container_name: jayce_service
+    network_mode: "host"
+    stdin_open: true
+    tty: true
+    depends_on:
+      - hexserver1
+      

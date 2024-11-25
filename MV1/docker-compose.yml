@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  broker:
+    build: ./broker
+    container_name: broker_service
+    network_mode: "host"
+    ports:
+      - "50054:50054"
